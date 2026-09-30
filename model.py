@@ -1,0 +1,41 @@
+import torch.nn as nn
+
+
+class PoseCNN(nn.Module):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.features = nn.Sequential(
+
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool2d((1, 1))
+        )
+
+        self.fc = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, 7)
+        )
+
+    def forward(self, x):
+
+        x = self.features(x)
+        x = self.fc(x)
+
+        return x

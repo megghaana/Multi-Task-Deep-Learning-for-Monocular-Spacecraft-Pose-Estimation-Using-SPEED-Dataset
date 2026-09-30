@@ -93,7 +93,8 @@ model = PoseCNN().to(device)
 
 print(model)
 
-criterion = nn.MSELoss()
+position_criterion = nn.MSELoss()
+quaternion_criterion = nn.MSELoss()
 
 optimizer = torch.optim.Adam(
     model.parameters(),
@@ -119,7 +120,17 @@ for epoch in range(epochs):
         predictions = model(images)
 
         # Calculate loss
-        loss = criterion(predictions, poses)
+        position_loss = position_criterion(
+            predictions[:, :3],
+            poses[:, :3]
+        )
+
+        quaternion_loss = quaternion_criterion(
+            predictions[:, 3:],
+            poses[:, 3:]
+        )
+
+        loss = position_loss + quaternion_loss
 
         # Backpropagation
         optimizer.zero_grad()
@@ -146,7 +157,17 @@ for epoch in range(epochs):
 
             predictions = model(images)
 
-            loss = criterion(predictions, poses)
+            position_loss = position_criterion(
+                predictions[:, :3],
+                poses[:, :3]
+            )
+
+            quaternion_loss = quaternion_criterion(
+                predictions[:, 3:],
+                poses[:, 3:]
+            )
+
+            loss = position_loss + quaternion_loss
 
             val_loss += loss.item()
 
