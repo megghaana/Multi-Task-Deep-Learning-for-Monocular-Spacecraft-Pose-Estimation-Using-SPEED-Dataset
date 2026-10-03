@@ -2,10 +2,10 @@ import torch
 import numpy as np
 
 from pathlib import Path
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torchvision import transforms
 
-from data_loader import SpeedDataset
+from data_loader import SPEEDDataset
 from model import PoseCNN
 
 
@@ -35,7 +35,7 @@ TRAIN_JSON = DATASET_PATH / "train.json"
 
 
 # --------------------------------------------------
-# 3. Image transformation
+# 3. Transform
 # --------------------------------------------------
 
 transform = transforms.Compose([
@@ -45,10 +45,10 @@ transform = transforms.Compose([
 
 
 # --------------------------------------------------
-# 4. Load dataset
+# 4. Load complete dataset
 # --------------------------------------------------
 
-dataset = SpeedDataset(
+dataset = SPEEDDataset(
     TRAIN_JSON,
     IMAGE_PATH,
     transform
@@ -58,11 +58,32 @@ print("Total samples:", len(dataset))
 
 
 # --------------------------------------------------
-# 5. DataLoader
+# 5. Load validation indices
 # --------------------------------------------------
 
-test_loader = DataLoader(
+validation_indices = torch.load(
+    "validation_indices.pth",
+    weights_only=True
+)
+
+print(
+    "Validation samples:",
+    len(validation_indices)
+)
+
+
+# --------------------------------------------------
+# 6. Create validation dataset
+# --------------------------------------------------
+
+validation_dataset = Subset(
     dataset,
+    validation_indices
+)
+
+
+validation_loader = DataLoader(
+    validation_dataset,
     batch_size=32,
     shuffle=False,
     num_workers=0
@@ -70,14 +91,14 @@ test_loader = DataLoader(
 
 
 # --------------------------------------------------
-# 6. Create model
+# 7. Create model
 # --------------------------------------------------
 
 model = PoseCNN().to(device)
 
 
 # --------------------------------------------------
-# 7. Load trained weights
+# 8. Load trained model
 # --------------------------------------------------
 
 model.load_state_dict(
@@ -94,12 +115,11 @@ print("Model loaded successfully!")
 
 
 # --------------------------------------------------
-# 8. Evaluation
+# 9. Evaluation
 # --------------------------------------------------
 
 translation_errors = []
 rotation_errors = []
-
 mse_losses = []
 
 criterion = torch.nn.MSELoss()
@@ -107,32 +127,36 @@ criterion = torch.nn.MSELoss()
 
 with torch.no_grad():
 
-    for images, poses in test_loader:
+    for batch_idx, (images, poses) in enumerate(validation_loader):
 
         images = images.to(device)
         poses = poses.to(device)
 
-        # Model prediction
         predictions = model(images)
 
         # MSE
-        loss = criterion(predictions, poses)
-        mse_losses.append(loss.item())
+        loss = criterion(
+            predictions,
+            poses
+        )
+
+        mse_losses.append(
+            loss.item()
+        )
 
         # Move to CPU
         predictions = predictions.cpu().numpy()
         poses = poses.cpu().numpy()
 
+        # Calculate errors
+        for pred, true in zip(
+            predictions,
+            poses
+        ):
 
-        # ------------------------------------------
-        # Calculate errors for every image
-        # ------------------------------------------
-
-        for pred, true in zip(predictions, poses):
-
-            # --------------------------------------
-            # Position
-            # --------------------------------------
+            # ------------------------------
+            # Position error
+            # ------------------------------
 
             predicted_position = pred[:3]
             true_position = true[:3]
@@ -141,18 +165,18 @@ with torch.no_grad():
                 predicted_position - true_position
             )
 
-            translation_errors.append(position_error)
+            translation_errors.append(
+                position_error
+            )
 
 
-            # --------------------------------------
-            # Quaternion
-            # --------------------------------------
+            # ------------------------------
+            # Quaternion error
+            # ------------------------------
 
             predicted_quaternion = pred[3:]
             true_quaternion = true[3:]
 
-
-            # Normalize quaternions
             predicted_quaternion = (
                 predicted_quaternion /
                 np.linalg.norm(predicted_quaternion)
@@ -163,8 +187,6 @@ with torch.no_grad():
                 np.linalg.norm(true_quaternion)
             )
 
-
-            # Quaternion dot product
             dot = np.abs(
                 np.dot(
                     predicted_quaternion,
@@ -172,20 +194,34 @@ with torch.no_grad():
                 )
             )
 
-            # Numerical safety
-            dot = np.clip(dot, 0.0, 1.0)
+            dot = np.clip(
+                dot,
+                0.0,
+                1.0
+            )
 
-
-            # Angular difference
             angle = 2 * np.arccos(dot)
 
-            angle_degrees = np.degrees(angle)
+            angle_degrees = np.degrees(
+                angle
+            )
 
-            rotation_errors.append(angle_degrees)
+            rotation_errors.append(
+                angle_degrees
+            )
+
+
+        # Progress
+        if (batch_idx + 1) % 10 == 0:
+            print(
+                f"Processed "
+                f"{batch_idx + 1}/"
+                f"{len(validation_loader)} batches"
+            )
 
 
 # --------------------------------------------------
-# 9. Results
+# 10. Final results
 # --------------------------------------------------
 
 mean_translation_error = np.mean(
@@ -202,20 +238,22 @@ mean_mse = np.mean(
 
 
 print("\n")
-print("=" * 50)
-print("         POSE ESTIMATION RESULTS")
-print("=" * 50)
+print("=" * 55)
+print("          VALIDATION RESULTS")
+print("=" * 55)
 
 print(
     f"Mean MSE Loss:          {mean_mse:.6f}"
 )
 
 print(
-    f"Mean Translation Error: {mean_translation_error:.4f} meters"
+    f"Mean Translation Error: "
+    f"{mean_translation_error:.4f} meters"
 )
 
 print(
-    f"Mean Rotation Error:    {mean_rotation_error:.4f} degrees"
+    f"Mean Rotation Error:    "
+    f"{mean_rotation_error:.4f} degrees"
 )
 
-print("=" * 50)
+print("=" * 55)
