@@ -5,7 +5,7 @@ from pathlib import Path
 from torch.utils.data import DataLoader, Subset
 from torchvision import transforms
 
-from data_loader import SPEEDDataset
+from data_loader import SpeedDataset
 from model import PoseCNN
 
 
@@ -48,7 +48,7 @@ transform = transforms.Compose([
 # 4. Load complete dataset
 # --------------------------------------------------
 
-dataset = SPEEDDataset(
+dataset = SpeedDataset(
     TRAIN_JSON,
     IMAGE_PATH,
     transform
